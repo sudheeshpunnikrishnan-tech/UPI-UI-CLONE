@@ -99,22 +99,51 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
     }
   }
 
+  void _showPhoneNumberDialog() {
+    final TextEditingController phoneController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enter Mobile Number'),
+        content: TextField(
+          controller: phoneController,
+          keyboardType: TextInputType.phone,
+          maxLength: 10,
+          decoration: const InputDecoration(
+            hintText: '10-digit number',
+            prefixText: '+91 ',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = phoneController.text.trim();
+              if (text.length == 10) {
+                Navigator.pop(context);
+                _startPaymentFlow('User ($text)', '$text@upi');
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Enter a valid 10-digit number')),
+                );
+              }
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('UPI Pay', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const CircleAvatar(
-              backgroundColor: Colors.blueAccent,
-              child: Icon(Icons.person, color: Colors.white),
-            ),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -146,41 +175,36 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
             const Text('Transfer Money', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildActionButton(Icons.qr_code_scanner, 'Scan QR', () async {
-                  final qrData = await Navigator.push(
+                  final dynamic qrData = await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const ScanQrScreen()),
                   );
-                  if (qrData != null && qrData is Map<String, String>) {
-                    _startPaymentFlow(qrData['name']!, qrData['upiId']!);
+                  if (qrData != null && qrData is Map<String, dynamic>) {
+                    _startPaymentFlow(qrData['name'].toString(), qrData['upiId'].toString());
                   }
                 }),
-                _buildActionButton(Icons.contacts, 'Pay Contact', () async {
-                  final contactData = await Navigator.push(
+                _buildActionButton(Icons.contacts, 'Contacts', () async {
+                  final dynamic contactData = await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const ContactPickerScreen()),
                   );
-                  if (contactData != null && contactData is Map<String, String>) {
-                    _startPaymentFlow(contactData['name']!, contactData['upiId']!);
+                  if (contactData != null && contactData is Map<String, dynamic>) {
+                    _startPaymentFlow(contactData['name'].toString(), contactData['upiId'].toString());
                   }
                 }),
-                _buildActionButton(Icons.phone_android, 'Phone No', () {
-                  _startPaymentFlow('Phone User', '9876543210@upi');
-                }),
-                _buildActionButton(Icons.account_balance, 'Bank Transfer', () {
-                  _startPaymentFlow('Self Account', 'transfer@sbi');
+                _buildActionButton(Icons.phone_android, 'Phone No', _showPhoneNumberDialog),
+                _buildActionButton(Icons.account_balance, 'To UPI ID', () {
+                  _startPaymentFlow('Friend', 'user@bank');
                 }),
               ],
             ),
             const SizedBox(height: 32),
-
             const Text('Recent Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             ListView.separated(
