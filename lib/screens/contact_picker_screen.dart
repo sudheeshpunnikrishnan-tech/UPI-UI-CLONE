@@ -12,25 +12,35 @@ class ContactPickerScreen extends StatefulWidget {
 class _ContactPickerScreenState extends State<ContactPickerScreen> {
   List<Contact> _contacts = [];
   bool _isLoading = true;
-  String _permissionStatus = '';
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _fetchContacts();
+    _loadContacts();
   }
 
-  Future<void> _fetchContacts() async {
+  Future<void> _loadContacts() async {
     final status = await Permission.contacts.request();
     if (status.isGranted) {
-      final contacts = await FlutterContacts.getContacts(withProperties: true);
-      setState(() {
-        _contacts = contacts;
-        _isLoading = false;
-      });
+      try {
+        final contacts = await FlutterContacts.getContacts(
+          withProperties: true,
+          withPhoto: false,
+        );
+        setState(() {
+          _contacts = contacts.where((c) => c.phones.isNotEmpty).toList();
+          _isLoading = false;
+        });
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'Failed to load contacts';
+          _isLoading = false;
+        });
+      }
     } else {
       setState(() {
-        _permissionStatus = 'Contacts permission denied';
+        _errorMessage = 'Permission denied to read contacts';
         _isLoading = false;
       });
     }
@@ -40,27 +50,26 @@ class _ContactPickerScreenState extends State<ContactPickerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select Contact to Pay'),
+        title: const Text('Select Contact'),
         elevation: 0,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _permissionStatus.isNotEmpty
-              ? Center(child: Text(_permissionStatus))
+          : _errorMessage.isNotEmpty
+              ? Center(child: Text(_errorMessage))
               : _contacts.isEmpty
-                  ? const Center(child: Text('No contacts found'))
-                  : ListView.separated(
+                  ? const Center(child: Text('No contacts with phone numbers found'))
+                  : ListView.builder(
                       itemCount: _contacts.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final contact = _contacts[index];
-                        final phone = contact.phones.isNotEmpty ? contact.phones.first.number : 'No number';
+                        final phone = contact.phones.first.number;
                         return ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: Colors.blue.shade100,
                             child: Text(
-                              contact.displayName.isNotEmpty ? contact.displayName[0].toUpperCase() : '?',
-                              style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold),
+                              contact.displayName.isNotEmpty
+                                  ? contact.displayName[0].toUpperCase()
+                                  : '?',
                             ),
                           ),
                           title: Text(contact.displayName),
