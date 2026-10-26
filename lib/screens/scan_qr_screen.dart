@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ScanQrScreen extends StatefulWidget {
   const ScanQrScreen({super.key});
@@ -9,30 +10,56 @@ class ScanQrScreen extends StatefulWidget {
 }
 
 class _ScanQrScreenState extends State<ScanQrScreen> {
-  bool _isScanned = false;
+  final MobileScannerController controller = MobileScannerController();
+  bool _isProcessing = false;
+  bool _hasPermission = false;
+  bool _checkingPermission = true;
 
-  void _onDetect(BarcodeCapture capture) {
-    if (_isScanned) return;
+  @override
+  void initState() {
+    super.initState();
+    _requestCameraPermission();
+  }
 
-    final List<Barcode> barcodes = capture.barcodes;
-    for (final barcode in barcodes) {
+  Future<void> _requestCameraPermission() async {
+    final status = await Permission.camera.request();
+    setState(() {
+      _hasPermission = status.isGranted;
+      _checkingPermission = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _handleBarcode(BarcodeCapture capture) {
+    if (_isProcessing) return;
+
+    for (final barcode in capture.barcodes) {
       final String? rawValue = barcode.rawValue;
-      if (rawValue != null) {
-        _isScanned = true;
+      if (rawValue != null && rawValue.isNotEmpty) {
+        setState(() {
+          _isProcessing = true;
+        });
 
-        // UPI QR parsing (upi://pay?pa=...&pn=...)
-        String upiId = 'merchant@upi';
-        String name = 'Merchant Store';
+        String upiId = rawValue;
+        String name = 'Merchant';
 
         if (rawValue.startsWith('upi://pay')) {
-          final uri = Uri.parse(rawValue);
-          upiId = uri.queryParameters['pa'] ?? upiId;
-          name = uri.queryParameters['pn'] ?? name;
+          final uri = Uri.tryParse(rawValue);
+          if (uri != null) {
+            upiId = uri.queryParameters['pa'] ?? upiId;
+            name = uri.queryParameters['pn'] ?? name;
+          }
         } else if (rawValue.contains('@')) {
           upiId = rawValue;
           name = rawValue.split('@')[0];
         }
 
+        controller.stop();
         Navigator.of(context).pop({'name': name, 'upiId': upiId});
         break;
       }
@@ -43,33 +70,42 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan any UPI QR'),
+        title: const Text('Scan QR Code'),
         elevation: 0,
       ),
-      body: Stack(
-        alignment: Alignment.center,
-        children: [
-          MobileScanner(
-            onDetect: _onDetect,
-          ),
-          // Scanner Overlay Box
-          Container(
-            width: 250,
-            height: 250,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.white, width: 2.5),
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-          const Positioned(
-            bottom: 40,
-            child: Text(
-              'Align QR code inside the frame to scan',
-              style: TextStyle(color: Colors.white, fontSize: 14, backgroundColor: Colors.black45),
-            ),
-          ),
-        ],
-      ),
+      body: _checkingPermission
+          ? const Center(child: CircularProgressIndicator())
+          : !_hasPermission
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Camera permission is required to scan QR'),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _requestCameraPermission,
+                        child: const Text('Grant Permission'),
+                      ),
+                    ],
+                  ),
+                )
+              : Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    MobileScanner(
+                      controller: controller,
+                      onDetect: _handleBarcode,
+                    ),
+                    Container(
+                      width: 250,
+                      height: 250,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white, width: 2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ],
+                ),
     );
   }
 }
