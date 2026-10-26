@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/payment_screen.dart';
 import 'screens/pin_screen.dart';
-import 'screens/success_screen.dart';
+import 'screens/transaction_status_screen.dart';
 import 'screens/scan_qr_screen.dart';
 import 'screens/contact_picker_screen.dart';
 
@@ -42,7 +42,9 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
     {'name': 'Grocery Store', 'amount': 450.0, 'date': '24 Oct', 'type': 'debit'},
   ];
 
+  // പേയ്‌മെന്റ് പൂർണ്ണ പ്രക്രിയ കൈകാര്യം ചെയ്യുന്ന ഫംഗ്ഷൻ
   Future<void> _startPaymentFlow(String recipientName, String upiId) async {
+    // 1. എമൗണ്ട് അടിക്കാനുള്ള സ്ക്രീൻ
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -56,6 +58,7 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
     if (result != null && result is double) {
       final double amount = result;
 
+      // ബാലൻസ് തികയുമോ എന്ന് നോക്കുന്നു
       if (amount > accountBalance) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -64,6 +67,7 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
         return;
       }
 
+      // 2. പിൻ സ്ക്രീൻ
       if (!mounted) return;
       final bool? pinSuccess = await Navigator.push(
         context,
@@ -75,30 +79,35 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
         ),
       );
 
+      // 3. പിൻ അടിച്ചുകഴിഞ്ഞാൽ നേരെ Processing & Status (Success/Failed/Pending) സ്ക്രീനിലേക്ക്
       if (pinSuccess == true && mounted) {
-        setState(() {
-          accountBalance -= amount;
-          recentTransactions.insert(0, {
-            'name': recipientName,
-            'amount': amount,
-            'date': 'Just now',
-            'type': 'debit',
-          });
-        });
-
-        Navigator.push(
+        final bool? isPaymentSuccess = await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => SuccessScreen(
+            builder: (context) => TransactionStatusScreen(
               recipientName: recipientName,
               amount: amount,
             ),
           ),
         );
+
+        // ഇടപാട് വിജയകരമായാൽ മാത്രം അക്കൗണ്ട് ബാലൻസ് കുറയ്ക്കുകയും ലിസ്റ്റിൽ ചേർക്കുകയും ചെയ്യുന്നു
+        if (isPaymentSuccess == true && mounted) {
+          setState(() {
+            accountBalance -= amount;
+            recentTransactions.insert(0, {
+              'name': recipientName,
+              'amount': amount,
+              'date': 'Just now',
+              'type': 'debit',
+            });
+          });
+        }
       }
     }
   }
 
+  // ഫോൺ നമ്പർ നേരിട്ട് അടിച്ച് പണം അയക്കാനുള്ള ഡയലോഗ് ബോക്സ്
   void _showPhoneNumberDialog() {
     final TextEditingController phoneController = TextEditingController();
     showDialog(
@@ -127,7 +136,7 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
                 _startPaymentFlow('User ($text)', '$text@upi');
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Enter a valid 10-digit number')),
+                  const SnackBar(content: Text('Please enter a valid 10-digit number')),
                 );
               }
             },
@@ -144,12 +153,23 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
       appBar: AppBar(
         title: const Text('UPI Pay', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const CircleAvatar(
+              backgroundColor: Colors.blueAccent,
+              child: Icon(Icons.person, color: Colors.white),
+            ),
+            onPressed: () {},
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Bank Balance Card
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               color: Colors.blue.shade900,
@@ -175,8 +195,12 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
               ),
             ),
             const SizedBox(height: 24),
+
+            // Transfer Money Header
             const Text('Transfer Money', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
+
+            // 4 പ്രധാന ആക്ഷൻ ബട്ടണുകൾ
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -200,11 +224,13 @@ class _UPIHomeScreenState extends State<UPIHomeScreen> {
                 }),
                 _buildActionButton(Icons.phone_android, 'Phone No', _showPhoneNumberDialog),
                 _buildActionButton(Icons.account_balance, 'To UPI ID', () {
-                  _startPaymentFlow('Friend', 'user@bank');
+                  _startPaymentFlow('Store Merchant', 'merchant@okaxis');
                 }),
               ],
             ),
             const SizedBox(height: 32),
+
+            // സമീപകാല ഇടപാടുകളുടെ ലിസ്റ്റ് (Recent Transactions)
             const Text('Recent Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             ListView.separated(
